@@ -11,17 +11,17 @@ import AVFoundation
 
 protocol RecordScreenDelegate {
     
-     func RecordScreenDidOutputSampleBuffer(sampleBuffer: CMSampleBuffer!)
+    func RecordScreenDidOutputSampleBuffer(sampleBuffer: CMSampleBuffer!)
 }
 
 
 struct WindowLevel {
     
-   static let kShadyWindowLevel = Int(CGWindowLevelForKey(.DockWindowLevelKey) + 1000)
+    static let kShadyWindowLevel = Int(CGWindowLevelForKey(CGWindowLevelKey.dockWindow) + 1000)
 }
 
 class RecordScreen: NSObject {
-
+    
     var delegate: RecordScreenDelegate?
     /// 会话
     var captureSession: AVCaptureSession!
@@ -45,25 +45,29 @@ class RecordScreen: NSObject {
     var isScreenInput: Bool = true
     
     var isRunning: Bool {
-        return captureSession.running
+        return captureSession.isRunning
     }
     
     deinit {
         
-        NSNotificationCenter.defaultCenter().removeObserver(self, name: AVCaptureSessionRuntimeErrorNotification, object: captureSession)
+        NotificationCenter.default.removeObserver(self, name: NSNotification.Name.AVCaptureSessionRuntimeError, object: captureSession)
     }
     
 }
 
 
 extension RecordScreen : AVCaptureFileOutputDelegate {
+    func fileOutputShouldProvideSampleAccurateRecordingStart(_ output: AVCaptureFileOutput) -> Bool {
+        return true
+    }
+    
     
     // MARK: 创建会话
     func createCaptureSession() -> Bool {
         
         captureSession = AVCaptureSession()
-        if captureSession.canSetSessionPreset(AVCaptureSessionPreset1280x720) {
-            captureSession.canSetSessionPreset(AVCaptureSessionPreset1280x720)
+        if captureSession.canSetSessionPreset(AVCaptureSession.Preset.hd1280x720) {
+            captureSession.canSetSessionPreset(AVCaptureSession.Preset.hd1280x720)
         }
         
         display = CGMainDisplayID()
@@ -77,9 +81,9 @@ extension RecordScreen : AVCaptureFileOutputDelegate {
             return false
         }
         
-        let mic = AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeAudio)
+        let mic = AVCaptureDevice.default(for: AVMediaType.audio)
         do {
-            try audioMicInput = AVCaptureDeviceInput.init(device: mic)
+            try audioMicInput = AVCaptureDeviceInput.init(device: mic!)
             if captureSession.canAddInput(audioMicInput) {
                 captureSession.addInput(audioMicInput)
             }
@@ -94,21 +98,20 @@ extension RecordScreen : AVCaptureFileOutputDelegate {
             return false
         }
         
-        NSNotificationCenter.defaultCenter().addObserver(self, selector: #selector(captureSessionRuntimeErrorDidOccur(_:)), name: AVCaptureSessionRuntimeErrorNotification, object: captureSession)
+        NotificationCenter.default.addObserver(self, selector: #selector(captureSessionRuntimeErrorDidOccur(note:)), name: NSNotification.Name.AVCaptureSessionRuntimeError, object: captureSession)
         
         return true
     }
     // MARK: - 创建添加预览层
     func createCaptureVideoPreView() -> AVCaptureVideoPreviewLayer {
-        
         let preView = AVCaptureVideoPreviewLayer(session: captureSession)
-        preView.videoGravity = AVLayerVideoGravityResizeAspectFill
+        preView.videoGravity = AVLayerVideoGravity.resizeAspectFill
         return preView
     }
     // MARK: - 设置获取最大帧速率
     func setMaxRrameRate(rate: Int32) {
         
-        let frameDuration = CMTimeMake(1, rate)
+        let frameDuration = CMTimeMake(value: 1, timescale: rate)
         captureScreenInput.minFrameDuration = frameDuration
     }
     
@@ -132,23 +135,23 @@ extension RecordScreen : AVCaptureFileOutputDelegate {
             if captureSession.canAddInput(captureScreenInput) {
                 captureSession.addInput(captureScreenInput)
             }
-            setMaxRrameRate(Int32(getMaxFrameRate()))
+            setMaxRrameRate(rate: Int32(getMaxFrameRate()))
         }
         captureScreenInput.cropRect = cropRect
         captureSession.commitConfiguration()
     }
-
+    
     // MARK: - 设置录制区域
-    func setDisplayAndCropRect()  {
+    @objc func setDisplayAndCropRect()  {
         
-        for screen in NSScreen.screens()! {
+        for screen in NSScreen.screens {
             
             let frame = screen.frame
-            let window = NSWindow(contentRect: frame, styleMask: NSBorderlessWindowMask, backing: .Buffered, defer: false)
-            window.backgroundColor = NSColor.blackColor()
+            let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.backgroundColor = NSColor.black
             window.alphaValue = 0.5
-            window.level = WindowLevel.kShadyWindowLevel
-            window.releasedWhenClosed = false
+            window.level = NSWindow.Level(rawValue: WindowLevel.kShadyWindowLevel)
+            window.isReleasedWhenClosed = false
             
             let drawMouseBoxView = DrawMouseBoxView(frame: frame)
             drawMouseBoxView.delegate = self
@@ -156,20 +159,21 @@ extension RecordScreen : AVCaptureFileOutputDelegate {
             window.makeKeyAndOrderFront(self)
             shadeWindows.append(window)
         }
-        NSCursor.currentCursor().push()
+        NSCursor.current.push()
     }
     
-    func captureSessionRuntimeErrorDidOccur(note: NSNotification)  {
+    @objc func captureSessionRuntimeErrorDidOccur(note: NSNotification)  {
         
         let error = note.userInfo![AVCaptureSessionErrorKey]
-        let alert = NSAlert()
-        alert.alertStyle = .CriticalAlertStyle
-        alert.messageText = (error?.localizedDescription)!
-        
-        let info = (error?.localizedRecoverySuggestion)!!
-        alert.informativeText = info
-        
-        alert.beginSheetModalForWindow(NSApplication.sharedApplication().keyWindow!, completionHandler: nil)
+        print("RecordScreen-captureSessionRuntime-报错了")
+//        let alert = NSAlert()
+//        alert.alertStyle = .critical
+//        alert.messageText = ((error as AnyObject).localizedDescription)!
+//
+//        let info = ((error as AnyObject).localizedRecoverySuggestion)!
+//        alert.informativeText = info
+//
+//        alert.beginSheetModal(for: NSApplication.shared.keyWindow!, completionHandler: nil)
     }
     
     ///
@@ -180,19 +184,23 @@ extension RecordScreen : AVCaptureFileOutputDelegate {
     
     func captureOutput(captureOutput: AVCaptureFileOutput!, didOutputSampleBuffer sampleBuffer: CMSampleBuffer!, fromConnection connection: AVCaptureConnection!) {
         
-        delegate?.RecordScreenDidOutputSampleBuffer(sampleBuffer)
+        delegate?.RecordScreenDidOutputSampleBuffer(sampleBuffer: sampleBuffer)
         
     }
 }
 
 extension RecordScreen : AVCaptureFileOutputRecordingDelegate {
+    func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
+        
+    }
+    
     
     func captureOutput(captureOutput: AVCaptureFileOutput!, didFinishRecordingToOutputFileAtURL outputFileURL: NSURL!, fromConnections connections: [AnyObject]!, error: NSError!) {
         
         if error != nil {
             return
         }
-        NSWorkspace.sharedWorkspace().openURL(outputFileURL)
+        NSWorkspace.shared.open(outputFileURL as URL)
     }
 }
 
@@ -206,30 +214,33 @@ extension RecordScreen : DrawMouseBoxViewDelegate {
         globalRect = NSOffsetRect(globalRect, windowRect.origin.x, windowRect.origin.y)
         globalRect.origin.y = CGFloat(CGDisplayPixelsHigh(CGMainDisplayID())) - globalRect.origin.y
         print(display)
-        var displayID = display
-        var matchingDisplayCount: UInt32 = 0
+        let displayID = display
+        let matchingDisplayCount: UInt32 = 0
         
         /// 待解决
-        let error = CGGetDisplaysWithPoint(NSPointToCGPoint(globalRect.origin),
-                                           1,
-                                           UnsafeMutablePointer<CGDirectDisplayID>.alloc(Int(displayID)),
-                                           &matchingDisplayCount)
-        print("error \(error.rawValue)")
-        print(matchingDisplayCount)
-        if error == .Success && matchingDisplayCount == 1 {
-            print("设置成功...")
-            print(displayID)
-            addDisplayInputToCaptureSession(displayID, cropRect: NSRectToCGRect(rect))
-            
-        }
+        //let error = CGGetDisplaysWithPoint()
+//        let error = CGGetDisplaysWithPoint(NSPointToCGPoint(globalRect.origin),
+//                                           1,
+//                                           UnsafeMutablePointer<CGDirectDisplayID>.alloc(Int(displayID)),
+//                                           &matchingDisplayCount)
+//        print("error \(error.rawValue)")
+//        print(matchingDisplayCount)
+//        if error == .Success && matchingDisplayCount == 1 {
+//            print("设置成功...")
+//            print(displayID as Any)
+//            addDisplayInputToCaptureSession(newDisplay: displayID!, cropRect: NSRectToCGRect(rect))
+//
+//        }
+        
+        addDisplayInputToCaptureSession(newDisplay: displayID!, cropRect: NSRectToCGRect(rect))
         
         for window in NSApp.windows {
             
-            if window.level == WindowLevel.kShadyWindowLevel {
+            if window.level.rawValue == WindowLevel.kShadyWindowLevel {
                 window.close()
             }
         }
-        NSCursor.currentCursor().pop()
+        NSCursor.current.pop()
         shadeWindows.removeAll()
     }
 }
@@ -270,7 +281,7 @@ extension RecordScreen {
             
             do {
                 
-                try cameraInput = AVCaptureDeviceInput(device: device)
+                try cameraInput = AVCaptureDeviceInput(device: device!)
                 if captureSession.canAddInput(cameraInput) {
                     captureSession.addInput(cameraInput)
                     isScreenInput = false
@@ -298,7 +309,7 @@ extension RecordScreen {
         }
         
         do {
-            try audioMicInput = AVCaptureDeviceInput.init(device: device)
+            try audioMicInput = AVCaptureDeviceInput(device: device!)
             if captureSession.canAddInput(audioMicInput) {
                 captureSession.addInput(audioMicInput)
                 captureSession.startRunning()
@@ -325,42 +336,42 @@ extension RecordScreen {
             captureSession.stopRunning()
         }
     }
-    
-    func startRecording()  {
+     
+    @objc func startRecording()  {
         
         if isRecordScreening {
             return
         }
-    NSLog("Minimum Frame Duration: %f, Crop Rect: %@, Scale Factor: %f, Capture Mouse Clicks: %@, Capture Mouse Cursor: %@, Remove Duplicate Frames: %@",
-          CMTimeGetSeconds(captureScreenInput.minFrameDuration),
-          NSStringFromRect(NSRectFromCGRect(captureScreenInput.cropRect)),
-          captureScreenInput.scaleFactor,
-          captureScreenInput.capturesMouseClicks ? "Yes" : "NO",
-          captureScreenInput.capturesCursor ? "Yes" : "NO",
-          captureScreenInput.removesDuplicateFrames ? "Yes" : "NO")
+        NSLog("Minimum Frame Duration: %f, Crop Rect: %@, Scale Factor: %f, Capture Mouse Clicks: %@, Capture Mouse Cursor: %@, Remove Duplicate Frames: %@",
+              CMTimeGetSeconds(captureScreenInput.minFrameDuration),
+              NSStringFromRect(NSRectFromCGRect(captureScreenInput.cropRect)),
+              captureScreenInput.scaleFactor,
+              captureScreenInput.capturesMouseClicks ? "Yes" : "NO",
+              captureScreenInput.capturesCursor ? "Yes" : "NO",
+              captureScreenInput.removesDuplicateFrames ? "Yes" : "NO")
         
         isRecordScreening = true
         
-
-        let path = (NSHomeDirectory() + "/Desktop/AVRecordScreen_XXXXX" as NSString).cStringUsingEncoding(NSUTF8StringEncoding)
-        print("文件地址: \(String(CString: path, encoding: NSUTF8StringEncoding))")
+        
+        let path = (NSHomeDirectory() + "/Desktop/AVRecordScreen_XXXXX" as NSString).cString(using: String.Encoding.utf8.rawValue)
+        print("文件地址: \(String(cString: path!, encoding: String.Encoding.utf8) ?? "file://")")
         if let screenRecordingFileName: UnsafeMutablePointer<Int8> = strdup(path) {
             
             let fileDescriptor = mkstemp(screenRecordingFileName)
             if fileDescriptor != -1 {
                 
-                let fleNmaeStr = NSFileManager.defaultManager().stringWithFileSystemRepresentation(screenRecordingFileName, length: strlen(UnsafePointer.init(screenRecordingFileName)).hashValue) + ".mov"
-
-                captureMovieFileOutput.startRecordingToOutputFileURL(NSURL(fileURLWithPath: fleNmaeStr), recordingDelegate: self)
+                let fleNmaeStr = FileManager.default.string(withFileSystemRepresentation: screenRecordingFileName, length: strlen(UnsafePointer.init(screenRecordingFileName)).hashValue) + ".mov"
+                
+                captureMovieFileOutput.startRecording(to: NSURL(fileURLWithPath: fleNmaeStr) as URL, recordingDelegate: self)
             }
             
             remove(screenRecordingFileName)
             free(screenRecordingFileName)
         }
-
+        
     }
     
-    func stopRecording()  {
+    @objc func stopRecording()  {
         
         if isRecordScreening {
             captureMovieFileOutput.stopRecording()

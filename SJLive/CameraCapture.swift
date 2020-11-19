@@ -19,7 +19,7 @@ protocol CameraCaptureDelegate: NSObjectProtocol {
 
 class CameraCapture: NSObject {
 
-    let cameraQueue: dispatch_queue_t! = dispatch_queue_create("com.king129", DISPATCH_QUEUE_SERIAL)
+    let cameraQueue: DispatchQueue! = DispatchQueue(label: "com.king129") //dispatch_queue_create("com.king129", DISPATCH_QUEUE_SERIAL)
     var videoEncoder: VideoEncode = VideoEncode()
     
     var delegate: CameraCaptureDelegate?
@@ -33,9 +33,9 @@ class CameraCapture: NSObject {
         
         captureSession = AVCaptureSession()
         if (sessionPreset != nil) {
-            captureSession.sessionPreset = sessionPreset
+            captureSession.sessionPreset = AVCaptureSession.Preset(rawValue: sessionPreset!)
         }
-        captureDevice = AVCaptureDevice.defaultDeviceWithMediaType(AVMediaTypeVideo)
+        captureDevice = AVCaptureDevice.default(for: AVMediaType.video)
         
         if captureDevice == nil {
             return nil
@@ -56,7 +56,7 @@ class CameraCapture: NSObject {
         }
         
         captureVideoDataOutput = AVCaptureVideoDataOutput()
-        captureVideoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey : NSNumber.init(unsignedInt: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)]
+        captureVideoDataOutput.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String : NSNumber(value: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)]
 
     
         captureVideoDataOutput.setSampleBufferDelegate(self, queue: cameraQueue)
@@ -69,9 +69,9 @@ class CameraCapture: NSObject {
         }
         
         videoPreviewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
-        videoPreviewLayer.videoGravity = AVLayerVideoGravityResizeAspectFill
-        videoPreviewLayer.connection.videoOrientation = .Portrait
-        videoPreviewLayer.setAffineTransform(CGAffineTransformMakeScale(-1, 1))
+        videoPreviewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill
+        videoPreviewLayer.connection?.videoOrientation = .portrait
+        videoPreviewLayer.setAffineTransform(CGAffineTransform(scaleX: -1, y: 1))
         return videoPreviewLayer
     
     }
@@ -85,7 +85,7 @@ class CameraCapture: NSObject {
         videoEncoder.endEncode()
     }
     func isRunning() -> Bool {
-        return captureSession == nil ? false : captureSession.running
+        return captureSession == nil ? false : captureSession.isRunning
     }
 }
 
@@ -93,10 +93,10 @@ extension CameraCapture : AVCaptureVideoDataOutputSampleBufferDelegate {
     
     func captureOutput(captureOutput: AVCaptureOutput!, didOutputSampleBuffer sampleBuffer: CMSampleBuffer!, fromConnection connection: AVCaptureConnection!) {
         
-        guard let image:CVImageBufferRef = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+        guard let image:CVImageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
             return
         }
-        delegate?.CameraVideoOutput(image)
+        delegate?.CameraVideoOutput(sampleBuffer: image)
 //        videoEncoder.encodeImageBuffer(image, presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer), presentationDuration: CMSampleBufferGetDuration(sampleBuffer))
         // print("get camera image data! Yeh!")
     }

@@ -9,15 +9,12 @@
 import Cocoa
 
 protocol DrawMouseBoxViewDelegate {
-    
     func drawMouseBoxView(view: DrawMouseBoxView, didSelectRect rect: NSRect)
-
 }
 
 class DrawMouseBoxView: NSView {
 
     var delegate: DrawMouseBoxViewDelegate?
-    
     private var mouseDownPoint: NSPoint = NSZeroPoint
     private var selectionRect: NSRect = NSZeroRect
     
@@ -26,20 +23,18 @@ class DrawMouseBoxView: NSView {
         return true
     }
     
-    override func acceptsFirstMouse(theEvent: NSEvent?) -> Bool {
-        
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         return true
     }
     
     // 开始点击
-    override func mouseDown(theEvent: NSEvent) {
+    override func mouseDown(with event: NSEvent) {
         // 记录初始点
-        mouseDownPoint = theEvent.locationInWindow
+        mouseDownPoint = event.locationInWindow
     }
     // 正在拖拽
-    override func mouseDragged(theEvent: NSEvent) {
-        
-        let curPoint = theEvent.locationInWindow
+    override func mouseDragged(with event: NSEvent) {
+        let curPoint = event.locationInWindow
         let previousSelectionRect = selectionRect
         
         selectionRect = NSMakeRect(min(mouseDownPoint.x, curPoint.x),
@@ -47,27 +42,28 @@ class DrawMouseBoxView: NSView {
                                    max(mouseDownPoint.x, curPoint.x) - min(mouseDownPoint.x, curPoint.x),
                                    max(mouseDownPoint.y, curPoint.y) - min(mouseDownPoint.y, curPoint.y))
         
-        setNeedsDisplayInRect(NSUnionRect(selectionRect, previousSelectionRect))
+        setNeedsDisplay(NSUnionRect(selectionRect, previousSelectionRect))
     }
     // 停止拖拽
-    override func mouseUp(theEvent: NSEvent) {
-        
-        let mouseUpPoint = theEvent.locationInWindow
+    override func mouseUp(with event: NSEvent) {
+        let mouseUpPoint = event.locationInWindow
         let rect = NSMakeRect(min(mouseDownPoint.x, mouseUpPoint.x),
                               min(mouseDownPoint.y, mouseUpPoint.y),
                               max(mouseDownPoint.x, mouseUpPoint.x) - min(mouseDownPoint.x, mouseUpPoint.x),
                               max(mouseDownPoint.y, mouseUpPoint.y) - min(mouseDownPoint.y, mouseUpPoint.y))
-        delegate?.drawMouseBoxView(self, didSelectRect: rect)
-        
+        delegate?.drawMouseBoxView(view: self, didSelectRect: rect)
     }
     
-    
     // MARK: - 绘制拖拽区域
-    override func drawRect(dirtyRect: NSRect) {
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
         
-        NSColor.blackColor().set()
-        NSRectFill(dirtyRect)
-        NSColor.whiteColor().set()
-        NSFrameRect(selectionRect)
+        NSColor.black.set()
+        //NSBezierPath(rect: dirtyRect).fill()
+        //NSRectFill(dirtyRect)
+        dirtyRect.fill()
+        NSColor.white.set()
+        selectionRect.frame()
+        //NSFrameRect(selectionRect)
     }
 }
